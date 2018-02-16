@@ -1,0 +1,2 @@
+# sherlock
+Catches rewards abusers
