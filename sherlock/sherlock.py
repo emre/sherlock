@@ -2,6 +2,7 @@ from steem import Steem
 from steem.post import Post
 from steem.amount import Amount
 import steembase.exceptions
+import concurrent.futures
 import argparse
 import json
 import time
@@ -50,6 +51,8 @@ class Sherlock:
         self.minimum_vote_value = config.get("minimum_vote_value")
         self.comment_template = open(config.get("comment_template")).read()
         self.designated_post = Post(config.get("designated_post"))
+        self.thread_pool = concurrent.futures.ThreadPoolExecutor(
+            max_workers=config.get("threads"))
 
     def url(self, p):
         return "https://steemit.com/@%s/%s" % (
@@ -100,12 +103,11 @@ class Sherlock:
                 payout = self.get_payout_from_rshares(
                     active_vote["rshares"]
                 )
-                logger.info("Payout: %s", payout)
                 return payout
 
     def handle_operation(self, op_type, op_value, timestamp):
         if op_type != "vote":
-            # we're only interested in comments, skip.
+            # we're only interested in votes, skip.
             return
 
         comment_identifier = "@%s/%s" % (
@@ -128,7 +130,6 @@ class Sherlock:
         if vote_value < self.minimum_vote_value:
             return
 
-        logger.info("Vote value: $%s, voter: %s", vote_value, op_value["voter"])
         url = self.url(post)
         logger.info("Found an incident: %s", url)
 
@@ -164,7 +165,7 @@ class Sherlock:
                 author=self.bot_account,
             )
 
-            time.sleep(20)
+            time.sleep(21)
         except Exception as error:
             logger.error(error)
             if retry_count < 3:
@@ -199,8 +200,7 @@ class Sherlock:
         while True:
             while (self.get_last_block_height() - starting_point) > 0:
                 starting_point += 1
-                self.parse_block(starting_point)
-            logger.info("No block to process. Sleeping")
+                self.thread_pool.submit(self.parse_block, starting_point)
             time.sleep(3)
 
 
