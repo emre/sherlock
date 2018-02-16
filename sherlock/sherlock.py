@@ -3,15 +3,20 @@ from steem.post import Post
 from steem.amount import Amount
 import steembase.exceptions
 import concurrent.futures
+import asyncio
+from datetime import datetime
 import argparse
 import json
 import time
 import logging
 from dateutil.parser import parse
 
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 logging.basicConfig()
+
+mutex = asyncio.Semaphore()
 
 
 class memoized:
@@ -50,13 +55,37 @@ class Sherlock:
         self.timeframe = config.get("timeframe")
         self.minimum_vote_value = config.get("minimum_vote_value")
         self.comment_template = open(config.get("comment_template")).read()
-        self.designated_post = Post(config.get("designated_post"))
         self.thread_pool = concurrent.futures.ThreadPoolExecutor(
             max_workers=config.get("threads"))
+        self.main_post_title = config.get("main_post_title")
+        self.main_post_tags = config.get("main_post_tags")
+        self.main_post_template = open(
+            config.get("main_post_template")).read()
+        self.designated_post = self.get_or_create_main_post()
 
     def url(self, p):
         return "https://steemit.com/@%s/%s" % (
             p.get("author"), p.get("permlink"))
+
+    def get_or_create_main_post(self):
+        today = datetime.utcnow().date().strftime("%Y-%m-%d")
+        post_title = self.main_post_title.format(date=today)
+        permlink = "last-minute-upvote-list-%s" % today
+
+        try:
+            return Post("%s/%s" % (self.bot_account, permlink))
+        except steembase.exceptions.PostDoesNotExist:
+            pass
+
+        self.steemd_instance.commit.post(
+            post_title,
+            self.main_post_template,
+            self.bot_account,
+            tags=self.main_post_tags,
+            permlink=permlink,
+        )
+
+        return Post("%s/%s" % (self.bot_account, permlink))
 
     @memoized(ttl=300)
     def get_state(self):
@@ -106,6 +135,8 @@ class Sherlock:
                 return payout
 
     def handle_operation(self, op_type, op_value, timestamp):
+        global mutex
+
         if op_type != "vote":
             # we're only interested in votes, skip.
             return
@@ -130,15 +161,18 @@ class Sherlock:
         if vote_value < self.minimum_vote_value:
             return
 
-        url = self.url(post)
-        logger.info("Found an incident: %s", url)
+        logger.info("Found an incident: %s", self.url(post))
 
-        self.broadcast_comment(
-            op_value["voter"],
-            post,
-            vote_value,
-            vote_created_at
-        )
+        mutex.acquire()
+        try:
+            self.broadcast_comment(
+                op_value["voter"],
+                post,
+                vote_value,
+                vote_created_at
+            )
+        finally:
+            mutex.release()
 
     def broadcast_comment(self, voter, post, vote_value,
                           vote_created_at, retry_count=None):
@@ -165,10 +199,13 @@ class Sherlock:
                 author=self.bot_account,
             )
 
-            time.sleep(21)
+            time.sleep(20)
         except Exception as error:
             logger.error(error)
-            if retry_count < 3:
+            if 'Duplicate' in error.args[0]:
+                return
+            if retry_count < 5:
+                time.sleep(20)
                 return self.broadcast_comment(voter, post, vote_value,
                         vote_created_at, retry_count + 1)
             else:
@@ -215,7 +252,7 @@ def main():
         keys=[config["posting_key"], ]
     )
     sherlock = Sherlock(
-        steemd_instance ,
+        steemd_instance,
         config,
     )
     sherlock.run()

@@ -5,6 +5,9 @@
   "minimum_vote_value": 0.1,
   "timeframe": "12-24",
   "start_block": "",
-  "designated_post": "https://steemit.com/bot/@turbot/last-minute-upvotes",
-  "comment_template":  "/users/emre/Projects/sherlock/comment_template.md"
+  "comment_template":  "/users/emre/Projects/sherlock/comment_template.md",
+  "main_post_template": "/users/emre/Projects/sherlock/post_template.md",
+  "main_post_title": "Last Minute Upvoter Accounts ({date})",
+  "main_post_tags": ["bots"],
+  "threads": 4
 }
