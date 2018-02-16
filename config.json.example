@@ -1,0 +1,10 @@
+{
+  "nodes": ["https://api.steemit.com"],
+  "posting_key": "posting_wif",
+  "bot_account": "turbot",
+  "minimum_vote_value": 0.1,
+  "timeframe": "12-24",
+  "start_block": "",
+  "designated_post": "https://steemit.com/bot/@turbot/last-minute-upvotes",
+  "comment_template":  "/users/emre/Projects/sherlock/comment_template.md"
+}
