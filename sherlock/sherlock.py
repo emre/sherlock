@@ -61,13 +61,14 @@ class Sherlock:
         self.main_post_tags = config.get("main_post_tags")
         self.main_post_template = open(
             config.get("main_post_template")).read()
-        self.designated_post = self.get_or_create_main_post()
+        self.designated_post = self.main_post
 
     def url(self, p):
         return "https://steemit.com/@%s/%s" % (
             p.get("author"), p.get("permlink"))
 
-    def get_or_create_main_post(self):
+    @property
+    def main_post(self):
         today = datetime.utcnow().date().strftime("%Y-%m-%d")
         post_title = self.main_post_title.format(date=today)
         permlink = "last-minute-upvote-list-%s" % today
@@ -117,8 +118,12 @@ class Sherlock:
         return payout
 
     def get_last_block_height(self):
-        props = self.steemd_instance.get_dynamic_global_properties()
-        return props['head_block_number']
+        try:
+            props = self.steemd_instance.get_dynamic_global_properties()
+            return props['head_block_number']
+        except TypeError:
+            # sometimes nodes return null to that call.
+            return self.get_last_block_height()
 
     def vote_abused(self, post, vote_created_at):
         diff = post["cashout_time"] - vote_created_at
@@ -204,8 +209,13 @@ class Sherlock:
             logger.error(error)
             if 'Duplicate' in error.args[0]:
                 return
-            if retry_count < 5:
+            if 'You may only comment once every' in error.args[0]:
+                logger.error("Throttled for commenting. Sleeping.")
                 time.sleep(20)
+                return self.broadcast_comment(voter, post, vote_value,
+                        vote_created_at, retry_count + 1)
+
+            if retry_count < 10:
                 return self.broadcast_comment(voter, post, vote_value,
                         vote_created_at, retry_count + 1)
             else:
