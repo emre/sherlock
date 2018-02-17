@@ -1,16 +1,16 @@
-from steem import Steem
-from steem.post import Post
-from steem.amount import Amount
-import steembase.exceptions
-import concurrent.futures
-from datetime import datetime
 import argparse
+import concurrent.futures
 import json
-import time
 import logging
 import threading
-from dateutil.parser import parse
+import time
+from datetime import datetime
 
+import steembase.exceptions
+from dateutil.parser import parse
+from steem import Steem
+from steem.amount import Amount
+from steem.post import Post
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -120,7 +120,7 @@ class Sherlock:
     def get_last_block_height(self):
         try:
             props = self.steemd_instance.get_dynamic_global_properties()
-            return props['head_block_number']
+            return props['last_irreversible_block_num']
         except TypeError:
             # sometimes nodes return null to that call.
             return self.get_last_block_height()
@@ -171,6 +171,7 @@ class Sherlock:
             op_value["voter"],
             block_id
         )
+
         t = threading.Thread(
             target=self.broadcast_comment,
             args=(
