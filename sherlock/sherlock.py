@@ -139,7 +139,7 @@ class Sherlock:
                 )
                 return payout
 
-    def handle_operation(self, op_type, op_value, timestamp):
+    def handle_operation(self, op_type, op_value, timestamp, block_id):
 
         if op_type != "vote":
             # we're only interested in votes, skip.
@@ -165,7 +165,12 @@ class Sherlock:
         if vote_value < self.minimum_vote_value:
             return
 
-        logger.info("Found an incident: %s", self.url(post))
+        logger.info(
+            "Found an incident: %s - voter: %s, block id: %s",
+            self.url(post),
+            op_value["voter"],
+            block_id
+        )
         t = threading.Thread(
             target=self.broadcast_comment,
             args=(
@@ -244,6 +249,7 @@ class Sherlock:
                 operation['op'][0],
                 operation['op'][1],
                 block_header["timestamp"],
+                block_id,
             )
 
     def run(self):
