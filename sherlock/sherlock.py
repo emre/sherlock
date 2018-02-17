@@ -3,12 +3,12 @@ from steem.post import Post
 from steem.amount import Amount
 import steembase.exceptions
 import concurrent.futures
-import asyncio
 from datetime import datetime
 import argparse
 import json
 import time
 import logging
+import threading
 from dateutil.parser import parse
 
 
@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 logging.basicConfig()
 
-mutex = asyncio.Semaphore()
+mutex = threading.Semaphore()
 
 
 class memoized:
@@ -140,7 +140,6 @@ class Sherlock:
                 return payout
 
     def handle_operation(self, op_type, op_value, timestamp):
-        global mutex
 
         if op_type != "vote":
             # we're only interested in votes, skip.
@@ -167,27 +166,30 @@ class Sherlock:
             return
 
         logger.info("Found an incident: %s", self.url(post))
-
-        mutex.acquire()
-        try:
-            self.broadcast_comment(
+        t = threading.Thread(
+            target=self.broadcast_comment,
+            args=(
                 op_value["voter"],
                 post,
                 vote_value,
-                vote_created_at
-            )
-        finally:
-            mutex.release()
+                vote_created_at,
+            ))
+        t.start()
 
     def broadcast_comment(self, voter, post, vote_value,
                           vote_created_at, retry_count=None):
+        global mutex
+
         if not retry_count:
             retry_count = 0
 
-        diff = post["cashout_time"] - vote_created_at
-        diff_in_hours = float(diff.total_seconds()) / float(3600)
+        mutex.acquire()
+        logger.info('Mutex acquired.')
 
         try:
+            diff = post["cashout_time"] - vote_created_at
+            diff_in_hours = float(diff.total_seconds()) / float(3600)
+
             comment_body = self.comment_template.format(
                 username=voter,
                 author=post.get("author"),
@@ -224,6 +226,9 @@ class Sherlock:
                     retry_count,
                     post.identifier,
                 )
+        finally:
+            logger.info('Mutex released.')
+            mutex.release()
 
     def parse_block(self, block_id):
         logger.info("Parsing %s", block_id)
