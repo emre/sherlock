@@ -74,7 +74,10 @@ class Sherlock:
         permlink = "last-minute-upvote-list-%s" % today
 
         try:
-            return Post("%s/%s" % (self.bot_account, permlink))
+            return Post(
+                "%s/%s" % (self.bot_account, permlink),
+                steemd_instance=self.steemd_instance,
+            )
         except steembase.exceptions.PostDoesNotExist:
             pass
 
@@ -86,7 +89,10 @@ class Sherlock:
             permlink=permlink,
         )
 
-        return Post("%s/%s" % (self.bot_account, permlink))
+        return Post(
+            "%s/%s" % (self.bot_account, permlink),
+            steemd_instance=self.steemd_instance
+        )
 
     @memoized(ttl=300)
     def get_state(self):
@@ -148,7 +154,9 @@ class Sherlock:
         comment_identifier = "@%s/%s" % (
             op_value["author"], op_value["permlink"])
         try:
-            post = Post(comment_identifier)
+            post = Post(
+                comment_identifier,
+                steemd_instance=self.steemd_instance)
         except steembase.exceptions.PostDoesNotExist:
             logger.info("Couldnt load the post. %s" % comment_identifier)
             return
