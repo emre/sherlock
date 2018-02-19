@@ -218,7 +218,7 @@ class Sherlock:
                 author=post.get("author"),
                 description=post.get("permlink")[0:16],
                 url=self.url(post),
-                amount=round(vote_value, 4),
+                amount=round(vote_value, 2),
                 time_remaining=round(diff_in_hours, 2),
                 timeframe=self.timeframe,
                 minimum_vote_value=self.minimum_vote_value
