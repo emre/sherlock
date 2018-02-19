@@ -84,19 +84,21 @@ class Sherlock:
             )
         except steembase.exceptions.PostDoesNotExist:
             pass
+
+        try:
+            self.steemd_instance.commit.post(
+                post_title,
+                self.main_post_template,
+                self.bot_account,
+                tags=self.main_post_tags,
+                permlink=permlink,
+            )
         except Exception as e:
             if 'You may only post once every 5 minutes' in e.args[0]:
                 logger.info("Sleeping for 300 seconds to create a new post.")
                 time.sleep(300)
                 return self.designated_post
-
-        self.steemd_instance.commit.post(
-            post_title,
-            self.main_post_template,
-            self.bot_account,
-            tags=self.main_post_tags,
-            permlink=permlink,
-        )
+            raise
 
         return Post(
             "%s/%s" % (self.bot_account, permlink),
