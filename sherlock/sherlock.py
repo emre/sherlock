@@ -61,14 +61,13 @@ class Sherlock:
         self.main_post_tags = config.get("main_post_tags")
         self.main_post_template = open(
             config.get("main_post_template")).read()
-        self.designated_post = self.main_post
 
     def url(self, p):
         return "https://steemit.com/@%s/%s" % (
             p.get("author"), p.get("permlink"))
 
     @property
-    def main_post(self):
+    def designated_post(self):
         today = datetime.utcnow().date().strftime("%Y-%m-%d")
         post_title = self.main_post_title.format(date=today)
         permlink = "last-minute-upvote-list-%s" % today
