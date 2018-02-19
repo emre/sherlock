@@ -227,17 +227,17 @@ class Sherlock:
             self.designated_post.edit(
                 self.designated_post.body + comment_body,
             )
-
-            # send reply to voted post
-            t = threading.Thread(
-                target=self.send_reply,
-                args=(
-                    voter,
-                    post,
-                    vote_value,
-                    diff_in_hours,
-                ))
-            t.start()
+            if self.reply_template:
+                # send reply to voted post
+                t = threading.Thread(
+                    target=self.send_reply,
+                    args=(
+                        voter,
+                        post,
+                        vote_value,
+                        diff_in_hours,
+                    ))
+                t.start()
 
             time.sleep(20)
         except Exception as error:
