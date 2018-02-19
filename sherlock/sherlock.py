@@ -79,6 +79,11 @@ class Sherlock:
             )
         except steembase.exceptions.PostDoesNotExist:
             pass
+        except Exception as e:
+            if 'You may only post once every 5 minutes' in e.args[0]:
+                logger.info("Sleeping for 300 seconds to create a new post.")
+                time.sleep(300)
+                return self.designated_post
 
         self.steemd_instance.commit.post(
             post_title,
@@ -180,7 +185,7 @@ class Sherlock:
         )
 
         t = threading.Thread(
-            target=self.broadcast_comment,
+            target=self.edit_main_post,
             args=(
                 op_value["voter"],
                 post,
@@ -189,7 +194,7 @@ class Sherlock:
             ))
         t.start()
 
-    def broadcast_comment(self, voter, post, vote_value,
+    def edit_main_post(self, voter, post, vote_value,
                           vote_created_at, retry_count=None):
         global mutex
 
@@ -214,9 +219,8 @@ class Sherlock:
                 minimum_vote_value=self.minimum_vote_value
             )
 
-            self.designated_post.reply(
-                comment_body,
-                author=self.bot_account,
+            self.designated_post.edit(
+                self.designated_post.body + comment_body,
             )
 
             time.sleep(20)
@@ -227,11 +231,11 @@ class Sherlock:
             if 'You may only comment once every' in error.args[0]:
                 logger.error("Throttled for commenting. Sleeping.")
                 time.sleep(20)
-                return self.broadcast_comment(voter, post, vote_value,
+                return self.edit_main_post(voter, post, vote_value,
                         vote_created_at, retry_count + 1)
 
             if retry_count < 10:
-                return self.broadcast_comment(voter, post, vote_value,
+                return self.edit_main_post(voter, post, vote_value,
                         vote_created_at, retry_count + 1)
             else:
                 logger.error(
