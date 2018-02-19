@@ -276,10 +276,10 @@ class Sherlock:
         if not retry_count:
             retry_count = 0
 
-        reply_mutex.acquire()
-        logger.info('Reply mutex acquired.')
-
         try:
+            reply_mutex.acquire()
+            logger.info('Reply mutex acquired.')
+
             reply_body = self.reply_template.format(
                 voter=voter,
                 author=post.get("author"),
@@ -295,10 +295,14 @@ class Sherlock:
             if 'You may only comment once every' in error.args[0]:
                 logger.error("Throttled for commenting. Sleeping.")
                 time.sleep(20)
+                logger.error("Sleep is finished, trying again.")
+                reply_mutex.release()
                 return self.send_reply(voter, post, vote_value,
                         diff_in_hours, retry_count + 1)
 
             if retry_count < 10:
+                reply_mutex.release()
+                logger.error("retry count is below 10, trying again.")
                 return self.send_reply(voter, post, vote_value,
                         diff_in_hours, retry_count + 1)
             else:

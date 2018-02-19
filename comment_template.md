@@ -1,2 +1,2 @@
 
-|@{username} | @{author} | [{description}]({url}) | **${amount}** | {time_remaining} |
+|@{username} | @{author} | [link]({url}) | **${amount}** | {time_remaining} |
