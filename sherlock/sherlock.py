@@ -17,6 +17,7 @@ logger.setLevel(logging.INFO)
 logging.basicConfig()
 
 mutex = threading.Semaphore()
+reply_mutex = threading.Semaphore()
 
 
 class memoized:
@@ -55,6 +56,10 @@ class Sherlock:
         self.timeframe = config.get("timeframe")
         self.minimum_vote_value = config.get("minimum_vote_value")
         self.comment_template = open(config.get("comment_template")).read()
+        if config.get("reply_template"):
+            self.reply_template = open(config.get("reply_template")).read()
+        else:
+            self.reply_template = None
         self.thread_pool = concurrent.futures.ThreadPoolExecutor(
             max_workers=config.get("threads"))
         self.main_post_title = config.get("main_post_title")
@@ -202,7 +207,7 @@ class Sherlock:
             retry_count = 0
 
         mutex.acquire()
-        logger.info('Mutex acquired.')
+        logger.info('Post edit mutex acquired.')
 
         try:
             diff = post["cashout_time"] - vote_created_at
@@ -222,6 +227,17 @@ class Sherlock:
             self.designated_post.edit(
                 self.designated_post.body + comment_body,
             )
+
+            # send reply to voted post
+            t = threading.Thread(
+                target=self.send_reply,
+                args=(
+                    voter,
+                    post,
+                    vote_value,
+                    diff_in_hours,
+                ))
+            t.start()
 
             time.sleep(20)
         except Exception as error:
@@ -244,8 +260,55 @@ class Sherlock:
                     post.identifier,
                 )
         finally:
-            logger.info('Mutex released.')
+            logger.info('Post edit mutex released.')
             mutex.release()
+
+    def send_reply(self, voter, post, vote_value, diff_in_hours,
+                   retry_count=None):
+        global reply_mutex
+
+        if not self.reply_template:
+            logger.info("Reply template isn't set. Skipping replies.")
+            return
+
+        if not retry_count:
+            retry_count = 0
+
+        reply_mutex.acquire()
+        logger.info('Reply mutex acquired.')
+
+        try:
+            reply_body = self.reply_template.format(
+                voter=voter,
+                author=post.get("author"),
+                amount=round(vote_value, 4),
+                time_remaining=round(diff_in_hours, 2),
+            )
+            post.reply(reply_body, author=self.bot_account)
+            time.sleep(20)
+        except Exception as error:
+            logger.error(error)
+            if 'Duplicate' in error.args[0]:
+                return
+            if 'You may only comment once every' in error.args[0]:
+                logger.error("Throttled for commenting. Sleeping.")
+                time.sleep(20)
+                return self.send_reply(voter, post, vote_value,
+                        diff_in_hours, retry_count + 1)
+
+            if retry_count < 10:
+                return self.send_reply(voter, post, vote_value,
+                        diff_in_hours, retry_count + 1)
+            else:
+                logger.error(
+                    "Tried %s times to comment but failed. Giving up. %s",
+                    retry_count,
+                    post.identifier,
+                )
+
+        finally:
+            reply_mutex.release()
+            logger.info('Reply mutex released.')
 
     def parse_block(self, block_id):
         logger.info("Parsing %s", block_id)
