@@ -228,6 +228,7 @@ class Sherlock:
 
             self.designated_post.edit(
                 self.designated_post.body + comment_body,
+                replace=True,
             )
             if self.reply_template:
                 # send reply to voted post
