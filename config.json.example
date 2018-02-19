@@ -7,6 +7,7 @@
   "start_block": "",
   "comment_template":  "/users/emre/Projects/sherlock/comment_template.md",
   "main_post_template": "/users/emre/Projects/sherlock/post_template.md",
+  "reply_template": "/users/emre/Projects/sherlock/reply_template.md",
   "main_post_title": "Last Minute Upvoter Accounts ({date})",
   "main_post_tags": ["bots"],
   "threads": 4
