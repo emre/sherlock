@@ -15,5 +15,7 @@
     "from_account": "flagger_account",
     "from_account_posting_key": "flagger_account_posting_key",
     "weight": -1
-  }
+  },
+  "suspicious_users": ["trafalgar", "traf"],
+  "suspicious_users_timeframe": "12-72"
 }
