@@ -10,5 +10,10 @@
   "reply_template": "/users/emre/Projects/sherlock/reply_template.md",
   "main_post_title": "Last Minute Upvoter Accounts ({date})",
   "main_post_tags": ["bots"],
-  "threads": 4
+  "threads": 4,
+  "flag_options": {
+    "from_account": "flagger_account",
+    "from_account_posting_key": "flagger_account_posting_key",
+    "weight": -1
+  }
 }

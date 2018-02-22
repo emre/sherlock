@@ -18,6 +18,7 @@ logging.basicConfig()
 
 mutex = threading.Semaphore()
 reply_mutex = threading.Semaphore()
+flag_mutex = threading.Semaphore()
 
 
 class memoized:
@@ -66,6 +67,7 @@ class Sherlock:
         self.main_post_tags = config.get("main_post_tags")
         self.main_post_template = open(
             config.get("main_post_template")).read()
+        self.flag_options = config.get("flag_options")
 
     def url(self, p):
         return "https://steemit.com/@%s/%s" % (
@@ -228,7 +230,6 @@ class Sherlock:
 
             self.designated_post.edit(
                 self.designated_post.body + comment_body,
-                replace=True,
             )
             if self.reply_template:
                 # send reply to voted post
@@ -240,6 +241,14 @@ class Sherlock:
                         vote_value,
                         diff_in_hours,
                     ))
+                t.start()
+
+            if self.flag_options:
+                t = threading.Thread(
+                    target=self.flag,
+                    args=(post, )
+                )
+
                 t.start()
 
             time.sleep(20)
@@ -317,6 +326,44 @@ class Sherlock:
             reply_mutex.release()
             logger.info('Reply mutex released.')
 
+    def flag(self, post, retry_count=0):
+        global flag_mutex
+
+        if not retry_count:
+            retry_count = 0
+
+        try:
+            flag_mutex.acquire()
+            logger.info("Flag mutex acquired.")
+
+            weight = self.flag_options.get("weight") or -1
+            voter = self.flag_options.get("from_account")
+
+            self.steemd_instance.commit.vote(
+                post.identifier,
+                weight,
+                account=voter)
+            logger.info("Flagged: %s.", post.identifier)
+            time.sleep(3)
+
+        except Exception as error:
+            logger.error(error)
+
+            if retry_count < 5:
+                flag_mutex.release()
+                return self.flag(post, retry_count + 1)
+            else:
+                logger.info(
+                    "Tried 5 times to flag: %s. Failed. Skipping.",
+                    post.identifier
+                )
+                flag_mutex.release()
+                return
+
+        finally:
+            flag_mutex.release()
+            logger.info("Flag mutex released.")
+
     def parse_block(self, block_id):
         logger.info("Parsing %s", block_id)
 
@@ -350,9 +397,14 @@ def main():
     args = parser.parse_args()
     config = json.loads(open(args.config).read())
 
+    keys = [config.get("posting_key")]
+    if config.get("flag_options") and \
+            'from_account_posting_key' in config.get("flag_options"):
+        keys.append(config["flag_options"]["from_account_posting_key"])
+
     steemd_instance = Steem(
         nodes=config["nodes"],
-        keys=[config["posting_key"], ]
+        keys=keys,
     )
     sherlock = Sherlock(
         steemd_instance,
