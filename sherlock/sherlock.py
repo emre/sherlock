@@ -68,6 +68,9 @@ class Sherlock:
         self.main_post_template = open(
             config.get("main_post_template")).read()
         self.flag_options = config.get("flag_options")
+        self.suspicious_users = config.get("suspicious_users")
+        self.suspicious_users_timeframe = config.get(
+            "suspicious_users_timeframe")
 
     def url(self, p):
         return "https://steemit.com/@%s/%s" % (
@@ -148,6 +151,11 @@ class Sherlock:
         diff = post["cashout_time"] - vote_created_at
         diff_in_hours = float(diff.total_seconds()) / float(3600)
         timeframe = list(map(int, self.timeframe.split("-")))
+        if self.suspicious_users and self.suspicious_users_timeframe:
+            if post.get("author") in self.suspicious_users:
+                timeframe = list(map(
+                    int, self.suspicious_users_timeframe.split("-")))
+
         return timeframe[0] < diff_in_hours < timeframe[1]
 
     def vote_value(self, vote_transaction, post):
