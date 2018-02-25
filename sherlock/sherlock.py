@@ -263,14 +263,17 @@ class Sherlock:
         except Exception as error:
             logger.error(error)
             if 'Duplicate' in error.args[0]:
+                mutex.release()
                 return
             if 'You may only comment once every' in error.args[0]:
                 logger.error("Throttled for commenting. Sleeping.")
                 time.sleep(20)
+                mutex.release()
                 return self.edit_main_post(voter, post, vote_value,
                         vote_created_at, retry_count + 1)
 
             if retry_count < 10:
+                mutex.release()
                 return self.edit_main_post(voter, post, vote_value,
                         vote_created_at, retry_count + 1)
             else:
@@ -309,6 +312,7 @@ class Sherlock:
         except Exception as error:
             logger.error(error)
             if 'Duplicate' in error.args[0]:
+                reply_mutex.release()
                 return
             if 'You may only comment once every' in error.args[0]:
                 logger.error("Throttled for commenting. Sleeping.")
