@@ -71,6 +71,10 @@ class Sherlock:
         self.suspicious_users = config.get("suspicious_users")
         self.suspicious_users_timeframe = config.get(
             "suspicious_users_timeframe")
+        self.whitelisted_users = []
+        if config.get("whitelisted_users") and \
+                isinstance(config.get("whitelisted_users"), list):
+            self.whitelisted_users = config.get("whitelisted_users")
 
     def url(self, p):
         return "https://steemit.com/@%s/%s" % (
@@ -174,6 +178,11 @@ class Sherlock:
 
         comment_identifier = "@%s/%s" % (
             op_value["author"], op_value["permlink"])
+
+        if op_value["voter"] in self.whitelisted_users:
+            logger.info("%s is whitelisted. Skipping.", op_value["voter"])
+            return
+
         try:
             post = Post(
                 comment_identifier,
