@@ -75,10 +75,45 @@ class Sherlock:
         if config.get("whitelisted_users") and \
                 isinstance(config.get("whitelisted_users"), list):
             self.whitelisted_users = config.get("whitelisted_users")
+        self.self_voter_report_options = config.get("self_voter_report_options")
 
     def url(self, p):
         return "https://steemit.com/@%s/%s" % (
             p.get("author"), p.get("permlink"))
+
+    @property
+    def designated_post_for_self_vote_report(self):
+        today = datetime.utcnow().date().strftime("%Y-%m-%d")
+        post_title = self.self_voter_report_options.get("title").format(date=today)
+        permlink = "self-voter-list-%s" % today
+
+        try:
+            return Post(
+                "%s/%s" % (self.bot_account, permlink),
+                steemd_instance=self.steemd_instance,
+            )
+        except steembase.exceptions.PostDoesNotExist:
+            pass
+
+        try:
+            self.steemd_instance.commit.post(
+                post_title,
+                open(self.self_voter_report_options.get("post_template")).read(),
+                self.bot_account,
+                tags=self.self_voter_report_options.get("tags"),
+                permlink=permlink,
+            )
+        except Exception as e:
+            if 'You may only post once every 5 minutes' in e.args[0]:
+                logger.info("Sleeping for 300 seconds to create a new post.")
+                time.sleep(300)
+                return self.designated_post_for_self_vote_report
+            raise
+
+        return Post(
+            "%s/%s" % (self.bot_account, permlink),
+            steemd_instance=self.steemd_instance
+        )
 
     @property
     def designated_post(self):
@@ -170,6 +205,33 @@ class Sherlock:
                 )
                 return payout
 
+    def handle_self_vote(self, post, op_value, vote_created_at):
+        if not self.self_voter_report_options:
+            return
+
+        if post.get("author") != op_value.get("voter"):
+            return
+
+        vote_value = self.vote_value(op_value, post)
+        if vote_value < self.self_voter_report_options.get("minimum_vote_value"):
+            return
+
+        logger.info(
+            "Found a self-vote: %s - voter: %s",
+            self.url(post),
+            op_value["voter"],
+        )
+
+        t = threading.Thread(
+            target=self.edit_self_vote_main_post,
+            args=(
+                op_value["voter"],
+                post,
+                vote_value,
+                vote_created_at,
+            ))
+        t.start()
+
     def handle_operation(self, op_type, op_value, timestamp, block_id):
 
         if op_type != "vote":
@@ -192,6 +254,9 @@ class Sherlock:
             return
 
         vote_created_at = parse(timestamp)
+
+        # handle self-vote
+        self.handle_self_vote(post, op_value, vote_created_at)
 
         # check the timeframe
         if not self.vote_abused(post, vote_created_at):
@@ -219,6 +284,56 @@ class Sherlock:
                 vote_created_at,
             ))
         t.start()
+
+    def edit_self_vote_main_post(self, voter, post, vote_value,
+                          vote_created_at, retry_count=None):
+        global mutex
+
+        if not retry_count:
+            retry_count = 0
+
+        mutex.acquire()
+        logger.info('Post edit mutex acquired.')
+
+        try:
+
+            incident_body = "|@{author}|[link]({url})|**${amount}**|\n"
+            incident_body = incident_body.format(
+                author=post.get("author"),
+                url=self.url(post),
+                amount=round(vote_value, 2),
+            )
+
+            self.designated_post_for_self_vote_report.edit(
+                self.designated_post_for_self_vote_report.body + incident_body,
+            )
+
+            time.sleep(20)
+        except Exception as error:
+            logger.error(error)
+            if 'Duplicate' in error.args[0]:
+                mutex.release()
+                return
+            if 'You may only comment once every' in error.args[0]:
+                logger.error("Throttled for commenting. Sleeping.")
+                time.sleep(20)
+                mutex.release()
+                return self.edit_self_vote_main_post(voter, post, vote_value,
+                        vote_created_at, retry_count + 1)
+
+            if retry_count < 10:
+                mutex.release()
+                return self.edit_self_vote_main_post(voter, post, vote_value,
+                        vote_created_at, retry_count + 1)
+            else:
+                logger.error(
+                    "Tried %s times to comment but failed. Giving up. %s",
+                    retry_count,
+                    post.identifier,
+                )
+        finally:
+            logger.info('Post edit mutex released.')
+            mutex.release()
 
     def edit_main_post(self, voter, post, vote_value,
                           vote_created_at, retry_count=None):
