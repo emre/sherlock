@@ -17,5 +17,10 @@
     "weight": -1
   },
   "suspicious_users": ["trafalgar", "traf"],
-  "suspicious_users_timeframe": "12-72"
+  "suspicious_users_timeframe": "12-72",
+    "flag_report_options": {
+    "title": "Daily Flag Report ({date})",
+    "tags": ["abuse", "flags", "abusereports"],
+    "post_template": "/users/emre/Projects/sherlock/flag_report_template.md"
+  }
 }
