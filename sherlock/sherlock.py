@@ -4,13 +4,14 @@ import json
 import logging
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import steembase.exceptions
 from dateutil.parser import parse
 from steem import Steem
 from steem.amount import Amount
 from steem.post import Post
+from steem.account import Account
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -76,6 +77,9 @@ class Sherlock:
                 isinstance(config.get("whitelisted_users"), list):
             self.whitelisted_users = config.get("whitelisted_users")
         self.self_voter_report_options = config.get("self_voter_report_options")
+        self.account_for_flag_report = config.get("account_for_flag_report") or self.bot_account
+        self.flag_report_options = config.get(
+            "flag_report_options")
 
     def url(self, p):
         return "https://steemit.com/@%s/%s" % (
@@ -149,6 +153,82 @@ class Sherlock:
             steemd_instance=self.steemd_instance
         )
 
+    def post_daily_flag_report(self):
+        options = self.flag_report_options
+        flags, total_amount = self.get_latest_flags()
+        today = datetime.utcnow().date().strftime("%Y-%m-%d")
+        post_title = options.get('title').format(date=today)
+        permlink = "flag-report-%s" % today
+
+        incidents = ""
+        for flag in flags:
+            incidents += "|@%s|%s|$%s|\n" % (
+                flag[0],
+                "[link](%s)" % (flag[1]),
+                str(flag[2]).replace("-", "")
+            )
+        template = open(options.get("post_template")).read()
+        body = template.format(
+            total_amount=str(total_amount).replace("-", ""),
+            incidents=incidents
+        )
+
+        try:
+            self.steemd_instance.commit.post(
+                post_title,
+                body,
+                self.bot_account,
+                tags=options.get('tags'),
+                permlink=permlink,
+            )
+        except Exception as e:
+            if 'You may only post once every 5 minutes' in e.args[0]:
+                logger.info("Sleeping for 300 seconds to create a new post.")
+                time.sleep(300)
+                return self.post_daily_flag_report()
+            raise
+
+    def get_latest_flags(self):
+        flags = []
+        total_amount = 0
+        account = Account(
+            self.account_for_flag_report,
+            steemd_instance=self.steemd_instance)
+        for vote in account.history_reverse(filter_by="vote"):
+            if vote["weight"] > 0:
+                continue
+            if vote["voter"] != self.account_for_flag_report:
+                continue
+            ts = parse(vote["timestamp"])
+            if ts < (datetime.utcnow() - timedelta(days=1)):
+                break
+
+            p = Post(
+                "%s/%s" % (vote["author"], vote["permlink"]),
+                steemd_instance=self.steemd_instance)
+
+            logger.info("Analyzing %s" % self.url(p))
+
+            for active_vote in p.get("active_votes"):
+                if float(active_vote.get("rshares")) > 0:
+                    continue
+
+                if active_vote.get("voter") != self.account_for_flag_report:
+                    continue
+
+                amount_removed = self.get_payout_from_rshares(active_vote.get("rshares"))
+                total_amount += amount_removed
+
+                flags.append(
+                    (
+                        p.get("author"),
+                        self.url(p),
+                        round(amount_removed, 2)
+                    )
+                )
+
+        return flags, round(total_amount, 2)
+
     @memoized(ttl=300)
     def get_state(self):
         base_price = Amount(self.steemd_instance.\
@@ -182,7 +262,7 @@ class Sherlock:
         try:
             props = self.steemd_instance.get_dynamic_global_properties()
             return props['last_irreversible_block_num']
-        except TypeError:
+        except (TypeError, steembase.exceptions.RPCError):
             # sometimes nodes return null to that call.
             return self.get_last_block_height()
 
@@ -530,6 +610,7 @@ class Sherlock:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("config", help="Config file in JSON format")
+    parser.add_argument("--post-daily-flag-report", help="Posts daily flag report")
     args = parser.parse_args()
     config = json.loads(open(args.config).read())
 
@@ -538,14 +619,20 @@ def main():
             'from_account_posting_key' in config.get("flag_options"):
         keys.append(config["flag_options"]["from_account_posting_key"])
 
+
     steemd_instance = Steem(
         nodes=config["nodes"],
         keys=keys,
     )
+
     sherlock = Sherlock(
         steemd_instance,
         config,
     )
+    if args.post_daily_flag_report:
+        sherlock.post_daily_flag_report()
+        return
+
     sherlock.run()
 
 
