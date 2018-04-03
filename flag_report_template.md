@@ -6,6 +6,6 @@
 ### Incidents
 ***
 
-|   Author    |   Post    | Amount Removed |
-|-------------|-----------|---------------|
+|   Author    |   Posts   | Comments      | Total  Removed |
+|-------------|-----------|---------------|----------------|
 {incidents}

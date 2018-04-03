@@ -161,18 +161,19 @@ class Sherlock:
         permlink = "flag-report-%s" % today
 
         incidents = ""
-        for flag in flags:
-            incidents += "|@%s|%s|$%s|\n" % (
-                flag[0],
-                "[link](%s)" % (flag[1]),
-                str(flag[2]).replace("-", "")
+        for author, flag in flags.items():
+            incidents += "|@%s|%s|%s|$%s|\n" % (
+                author,
+                flag.get("posts"),
+                flag.get("comments"),
+                str(round(flag.get("total_removed"), 2)).replace("-", ""),
             )
         template = open(options.get("post_template")).read()
         body = template.format(
             total_amount=str(total_amount).replace("-", ""),
             incidents=incidents
         )
-
+        print(body)
         try:
             self.steemd_instance.commit.post(
                 post_title,
@@ -189,7 +190,7 @@ class Sherlock:
             raise
 
     def get_latest_flags(self):
-        flags = []
+        flags = {}
         total_amount = 0
         account = Account(
             self.account_for_flag_report,
@@ -207,6 +208,18 @@ class Sherlock:
                 "%s/%s" % (vote["author"], vote["permlink"]),
                 steemd_instance=self.steemd_instance)
 
+            if vote["author"] not in flags:
+                flags[vote.get("author")] = {"posts": 0, "comments": 0, "total_removed": 0}
+
+            if p.is_main_post():
+                flags[vote.get("author")].update({
+                    "posts": flags[vote.get("author")]["posts"] + 1
+                })
+            else:
+                flags[vote.get("author")].update({
+                    "comments": flags[vote.get("author")]["comments"] + 1
+                })
+
             logger.info("Analyzing %s" % self.url(p))
 
             for active_vote in p.get("active_votes"):
@@ -219,13 +232,9 @@ class Sherlock:
                 amount_removed = self.get_payout_from_rshares(active_vote.get("rshares"))
                 total_amount += amount_removed
 
-                flags.append(
-                    (
-                        p.get("author"),
-                        self.url(p),
-                        round(amount_removed, 2)
-                    )
-                )
+                flags[vote.get("author")].update({
+                    "total_removed": flags[vote.get("author")]["total_removed"] + amount_removed,
+                })
 
         return flags, round(total_amount, 2)
 
