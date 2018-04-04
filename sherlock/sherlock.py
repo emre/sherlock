@@ -204,9 +204,13 @@ class Sherlock:
             if ts < (datetime.utcnow() - timedelta(days=1)):
                 break
 
-            p = Post(
-                "%s/%s" % (vote["author"], vote["permlink"]),
-                steemd_instance=self.steemd_instance)
+            try:
+                p = Post(
+                    "%s/%s" % (vote["author"], vote["permlink"]),
+                    steemd_instance=self.steemd_instance)
+            except steembase.exceptions.PostDoesNotExist:
+                logger.info("Couldnt load the post. %s" % vote["permlink"])
+                continue
 
             if vote["author"] not in flags:
                 flags[vote.get("author")] = {"posts": 0, "comments": 0, "total_removed": 0}
